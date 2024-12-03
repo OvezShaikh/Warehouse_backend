@@ -3,6 +3,7 @@ const router = express.Router();
 const transporter = require('../config/emailConfig');
 
 router.post('/', async (req, res) => {
+    res.status(200).json({ message: 'Your request has been received and is being processed.' });
     const { name, email, message, sendCopy } = req.body;
 
     if (!name || !email || !message) {

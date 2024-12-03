@@ -106,10 +106,16 @@ const mongoose = require('mongoose');
         Job Title: ${jobId}
         Applicant: ${name}
         Email: ${email}
-  
         Message: ${message}
   
         Please review the application and respond accordingly.`,
+
+        attachments: [
+          {
+            filename: req.file.originalname, // Use the original filename of the uploaded file
+            path: req.file.path, // Path to the uploaded file
+          },
+        ],
       };
   
       // Send the email
