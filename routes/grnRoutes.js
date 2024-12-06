@@ -26,7 +26,7 @@ router.post('/', async (req, res) => {
 
 // Get all GRNs with optional filtering and pagination
 router.get('/', async (req, res) => {
-  const { status, poNumber, page = 1, limit = 10 } = req.query;
+  const { status, poNumber } = req.query;
 
   const filter = {};
   if (status) filter.status = status;
@@ -34,15 +34,11 @@ router.get('/', async (req, res) => {
 
   try {
     const grns = await GRN.find(filter)
-      .skip((page - 1) * limit)
-      .limit(Number(limit));
-    const totalGrns = await GRN.countDocuments(filter);
+    
 
     res.status(200).json({
       grns,
       total: totalGrns,
-      page,
-      totalPages: Math.ceil(totalGrns / limit),
     });
   } catch (error) {
     console.error("Error fetching GRNs:", error);
