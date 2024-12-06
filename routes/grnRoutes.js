@@ -34,7 +34,7 @@ router.get('/', async (req, res) => {
 
   try {
     const grns = await GRN.find(filter)
-    
+    const totalGrns = await GRN.countDocuments(filter);
 
     res.status(200).json({
       grns,
