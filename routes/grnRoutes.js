@@ -4,6 +4,7 @@ const GRN = require('../models/grnModel'); // Adjust the path as needed
 const grnController = require('../controllers/grnController');
 // const authMiddleware = require('../middlewares/authMiddleware');
 const router = express.Router();
+const MasterList = require('../models/MasterList'); 
 
 // Create a new GRN
 router.post('/', async (req, res) => {
@@ -15,6 +16,15 @@ router.post('/', async (req, res) => {
   }
 
   try {
+     // Loop through each item in the items array and validate if itemNo exists in the MasterList
+     for (let item of items) {
+      const isValidItem = await MasterList.exists({ itemNo: item.itemNo });
+      
+      if (!isValidItem) {
+        return res.status(400).json({ message: `Invalid itemNo: ${item.itemNo}. It does not exist in the Master List.` });
+      }
+    }
+    
     const grnData = new GRN(req.body);
     await grnData.save();
     res.status(201).json(grnData);
@@ -209,27 +219,162 @@ router.patch('/:id/status', async (req, res) => {
   }
 });
 
+// Route to update item status and quantity (okQuantity, rejectedQuantity)
 router.patch('/:grnId/item/:itemId/status', async (req, res) => {
   try {
-    const { grnId, itemId } = req.params; // GRN ID and Item ID
-    const { status } = req.body; // New status for the item
+    const { grnId, itemId } = req.params;
+    const { status, okQuantity, rejectedQuantity } = req.body;
 
-    // Find GRN by ID and update the specific item's status
-    const updatedGrn = await GRN.findOneAndUpdate(
-      { _id: grnId, 'items._id': itemId }, // Locate GRN and specific item
-      { $set: { 'items.$.status': status } }, // Update item's status
-      { new: true } // Return the updated document
-    );
-
-    if (!updatedGrn) {
-      return res.status(404).json({ message: 'GRN or Item not found' });
+    // Validate status (ensure it's one of the allowed values)
+    const validStatuses = ['Pending', 'OK', 'Rejected'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ message: 'Invalid status value' });
     }
 
-    res.status(200).json(updatedGrn);
+    // Validate okQuantity and rejectedQuantity (cannot exceed itemQuantity)
+    const grn = await GRN.findById(grnId);
+    if (!grn) {
+      return res.status(404).json({ message: 'GRN not found' });
+    }
+
+    const item = grn.items.id(itemId);
+    if (!item) {
+      return res.status(404).json({ message: 'Item not found' });
+    }
+
+    // Calculate the total quantity
+    const totalQuantity = (okQuantity || 0) + (rejectedQuantity || 0);
+    if (totalQuantity > item.quantity) {
+      return res.status(400).json({ message: 'Total OK and Rejected quantities cannot exceed Item Quantity.' });
+    }
+
+    // Update the item with the new status and quantities
+    item.status = status;
+    item.okQuantity = okQuantity || item.okQuantity;
+    item.rejectedQuantity = rejectedQuantity || item.rejectedQuantity;
+
+    // Save the updated GRN
+    await grn.save();
+
+    res.status(200).json(grn);
   } catch (error) {
-    res.status(500).json({ message: 'Error updating item status', error });
+    console.error("Error updating item status:", error);
+    res.status(500).json({ message: "Error updating item status", error });
   }
 });
+
+
+// Route to update the item of a specific GRN by item ID
+router.patch('/:grnId/item/:itemId', async (req, res) => {
+  try {
+    const { grnId, itemId } = req.params;
+    const { okQuantity, rejectedQuantity, currentQuantity} = req.body;  // Expect either of these in the request body
+
+    // Validate that at least one of the quantities is provided
+    if (okQuantity === undefined && rejectedQuantity === undefined && currentQuantity === undefined) {
+      return res.status(400).json({ message: "Either okQuantity, rejectedQuantity, or currentQuantity must be provided." });
+    }
+
+    // Find the GRN document
+    const grn = await GRN.findById(grnId);
+    if (!grn) {
+      return res.status(404).json({ message: "GRN not found" });
+    }
+
+    // Find the item within the GRN
+    const item = grn.items.id(itemId);
+    if (!item) {
+      return res.status(404).json({ message: "Item not found" });
+    }
+
+    // Update the quantities based on what was provided in the request
+    if (okQuantity !== undefined) {
+      item.okQuantity = okQuantity;
+    }
+    if (rejectedQuantity !== undefined) {
+      item.rejectedQuantity = rejectedQuantity;
+    }
+    if (currentQuantity !== undefined) {
+      item.currentQuantity = currentQuantity;  // Update the currentQuantity field
+    }
+
+    // Save the updated GRN document
+    await grn.save();
+
+    // Recalculate okQuantity and rejectedQuantity for the entire GRN (optional)
+    const updatedOkQuantity = grn.items.reduce((sum, item) => sum + (item.okQuantity));
+    const updatedRejectedQuantity = grn.items.reduce((sum, item) => sum + (item.rejectedQuantity));
+
+    grn.okQuantity = updatedOkQuantity;
+    grn.rejectedQuantity = updatedRejectedQuantity;
+
+    // Save the updated GRN with recalculated totals
+    await grn.save();
+
+    res.status(200).json(grn);  // Respond with the updated GRN document
+  } catch (error) {
+    console.error("Error updating item quantities:", error);
+    res.status(500).json({ message: "Error updating item quantities", error });
+  }
+});
+
+
+
+// Update status for a specific quantity within an item
+// router.patch('/:grnId/item/:itemId/quantity/:quantityIndex/status', async (req, res) => {
+//   const { grnId, itemId, quantityIndex } = req.params;
+//   const { status } = req.body;
+
+//   // Validate status
+//   if (!['Pending', 'OK', 'Rejected'].includes(status)) {
+//     return res.status(400).json({ message: "Invalid status. Allowed values are 'Pending', 'OK', or 'Rejected'." });
+//   }
+
+//   try {
+//     // Update only the specific quantity's status
+//     const grn = await GRN.findOneAndUpdate(
+//       { _id: grnId, 'items._id': itemId },
+//       { $set: { [`items.$.quantities.${quantityIndex}.status`]: status } }, // Update the specific quantity's status
+
+//       { new: true }
+//     );
+
+//     if (!grn) {
+//       return res.status(404).json({ message: "GRN or Item not found" });
+//     }
+
+//     const updatedItem = grn.items.find((item) => item._id.toString() === itemId);
+//     res.status(200).json({
+//       message: "Quantity status updated successfully",
+//       updatedQuantity: updatedItem?.quantities?.[quantityIndex],
+//     });
+//     } catch (error) {
+//     console.error("Error updating quantity status:", error);
+//     res.status(500).json({ message: "Error updating quantity status", error: error.message });
+//   }
+// });
+
+
+// Get all quantities and their statuses for a specific item
+// router.get('/:grnId/item/:itemId/quantity', async (req, res) => {
+//   const { grnId, itemId } = req.params;
+
+//   try {
+//     const grn = await GRN.findOne(
+//       { _id: grnId, 'items._id': itemId },
+//       { 'items.$': 1 } // Fetch only the specific item
+//     );
+
+//     if (!grn || !grn.items.length) {
+//       return res.status(404).json({ message: "GRN or Item not found" });
+//     }
+
+//     res.status(200).json(grn.items[0].quantities);
+//   } catch (error) {
+//     console.error("Error fetching quantities:", error);
+//     res.status(500).json({ message: "Error fetching quantities", error: error.message });
+//   }
+// });
 
 
 module.exports = router;

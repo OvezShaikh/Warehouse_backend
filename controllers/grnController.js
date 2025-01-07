@@ -82,4 +82,80 @@ exports.getAllGRNs = async (req, res) => {
   }
 };
 
+exports.updateItemStatus = async (req, res) => {
+  const { grnId, itemId } = req.params; // GRN ID and Item ID
+  const { status, okQuantity, rejectedQuantity } = req.body; // New status and quantities
+
+  // Validate status
+  if (!['Pending', 'OK', 'Rejected'].includes(status)) {
+    return res.status(400).json({ message: "Invalid status. Allowed values are 'Pending', 'OK', or 'Rejected'." });
+  }
+
+  try {
+    // Find the GRN
+    const grn = await GRN.findById(grnId);
+    if (!grn) {
+      return res.status(404).json({ message: "GRN not found" });
+    }
+
+    // Locate the specific item
+    const item = grn.items.id(itemId);
+    if (!item) {
+      return res.status(404).json({ message: "Item not found" });
+    }
+
+    // Update the status
+    item.status = status; // Update item status
+
+    // If okQuantity and rejectedQuantity are provided, update them directly
+    if (typeof okQuantity === 'number') {
+      item.okQuantity = okQuantity;
+    }
+    if (typeof rejectedQuantity === 'number') {
+      item.rejectedQuantity = rejectedQuantity;
+    }
+
+    // Save the GRN
+    await grn.save();
+
+    // Recalculate the total okQuantity and rejectedQuantity for the entire GRN
+    const updatedOkQuantity = grn.items.reduce((sum, item) => sum + item.okQuantity);
+    const updatedRejectedQuantity = grn.items.reduce((sum, item) => sum + item.rejectedQuantity);
+
+    // Update the GRN with the recalculated values
+    grn.okQuantity = updatedOkQuantity;
+    grn.rejectedQuantity = updatedRejectedQuantity;
+    await grn.save();
+
+    res.status(200).json({
+      message: "Item status and quantities updated successfully",
+      item,
+    });
+  } catch (error) {
+    console.error("Error updating item status:", error);
+    res.status(500).json({ message: "Error updating item status", error: error.message });
+  }
+};
+
+
+const updateItem = async (req, res) => {
+  try {
+    const { grnId, itemId } = req.params;
+    const updatedItem = await GRNModel.findOneAndUpdate(
+      { _id: grnId, 'items._id': itemId },
+      { $set: { 'items.$': req.body } },  // Update item details
+      { new: true }
+    );
+    if (!updatedItem) {
+      return res.status(404).json({ message: 'Item or GRN not found' });
+    }
+    res.json(updatedItem);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+
+
 // Additional controller functions for handling other operations can go here...

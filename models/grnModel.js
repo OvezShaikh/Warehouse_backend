@@ -10,6 +10,11 @@ const grnItemSchema = new mongoose.Schema({
   dockCode: {type: String, required: true },
   receivingDate: { type: Date, required: true }, // Receiving date is required
   status: { type: String, enum: ['OK', 'Rejected', 'Pending'], default: 'Pending' },
+  okQuantity: { type: Number, default: 0   },
+  rejectedQuantity: { type: Number, default: 0  },
+  currentQuantity: {type: Number, default: 0 },
+  amount: {type: Number},
+  dispatchedQuantity: {type: Number, default: 0},
 });
 
 // Main GRN schema

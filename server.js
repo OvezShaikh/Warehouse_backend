@@ -185,6 +185,10 @@ const locationRoutes = require('./routes/location'); // Adjust the path as neces
 const dockLocationRoutes = require('./routes/dockLocationRoutes');
 const grnRoutes = require('./routes/grnRoutes');
 const settingsRoutes = require('./routes/settings');  // Import the settings routes
+const masterListRoutes = require('./routes/masterListRoutes');
+const dispatcherRoutes = require('./routes/dispatcherRoutes');
+
+
 
 
 // Use the routes
@@ -201,6 +205,9 @@ app.use('/api/visitors', visitorsRoutes);  // Add the visitors route
 app.use('/api/jobs', jobRoutes);  // Use the job routes here
 app.use('/api/contact', contactRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/masterlist', masterListRoutes);
+app.use('/api/dispatchers', dispatcherRoutes);
+
 
 
 
