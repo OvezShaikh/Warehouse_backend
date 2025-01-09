@@ -318,7 +318,43 @@ router.patch('/:grnId/item/:itemId', async (req, res) => {
   }
 });
 
+router.post('/save-dispatch', async (req, res) => {
+  try {
+    const dispatchData = req.body; // Array of GRNs with dispatched data
 
+    for (const grn of dispatchData) {
+      const { receivingNo, dispatcherId, items } = grn;
+
+      // Validate if GRN exists for the given receivingNo
+      const existingGrn = await GRN.findOne({ receivingNo });
+      if (!existingGrn) {
+        return res.status(404).json({ success: false, message: `GRN with receivingNo ${receivingNo} not found.` });
+      }
+
+      // Update each item's dispatched quantity in the database
+      for (const item of items) {
+        // Ensure dispatchedQuantity is not greater than the available quantity
+        const grnItem = existingGrn.items.find((i) => i.itemNo === item.itemNo);
+        if (!grnItem) {
+          return res.status(404).json({ success: false, message: `Item No ${item.itemNo} not found in GRN ${receivingNo}.` });
+        }
+
+        if (item.dispatchedQuantity > grnItem.quantity) {
+          return res.status(400).json({ success: false, message: `Dispatched quantity for Item No ${item.itemNo} exceeds available quantity.` });
+        }
+
+        await GRN.updateOne(
+          { receivingNo, 'items.itemNo': item.itemNo },
+          { $set: { 'items.$.dispatchedQuantity': item.dispatchedQuantity, dispatcherId } }
+        );
+      }
+    }
+
+    res.status(200).json({ success: true, message: 'Dispatch data saved successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 // Update status for a specific quantity within an item
 // router.patch('/:grnId/item/:itemId/quantity/:quantityIndex/status', async (req, res) => {
